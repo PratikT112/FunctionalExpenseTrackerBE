@@ -39,4 +39,16 @@ public class IdGenerator {
         }
         throw new IllegalStateException("Failed to generate unique ReconId after 5 attempts");
     }
+
+    public String generateProratedExpenseId(UUID userId) {
+        String userPrefix = userId.toString().replace("-", "").substring(0, 8);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            LocalDateTime now = LocalDateTime.now();
+            String id = "P" + userPrefix + "-" + now.format(DATE_FMT) + "-" + now.format(TIME_FMT);
+            if (!expenseRepo.existsById(id)) return id;
+            try { Thread.sleep(1); } catch (InterruptedException ignored) {}
+        }
+        throw new IllegalStateException("Failed to generate unique ExpenseId after 5 attempts");
+    }
+
 }
