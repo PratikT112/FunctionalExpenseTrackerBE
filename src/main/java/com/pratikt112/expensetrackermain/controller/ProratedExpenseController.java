@@ -21,7 +21,7 @@ public class ProratedExpenseController {
 
     private final ExpenseService expenseService;
 
-    public ExpenseController(ExpenseService expenseService) {
+    public ProratedExpenseController(ExpenseService expenseService) {
         this.expenseService = expenseService;
     }
 

@@ -3,6 +3,7 @@ package com.pratikt112.expensetrackermain.service;
 import com.pratikt112.expensetrackermain.DTO.ExpenseAmendDto;
 import com.pratikt112.expensetrackermain.DTO.ExpenseDTO;
 import com.pratikt112.expensetrackermain.DTO.ExpenseResponseDTO;
+import com.pratikt112.expensetrackermain.DTO.ProratedExpenseDTO;
 import com.pratikt112.expensetrackermain.enums.ReconciliationStatus;
 import com.pratikt112.expensetrackermain.model.*;
 import com.pratikt112.expensetrackermain.repository.*;
@@ -10,6 +11,11 @@ import com.pratikt112.expensetrackermain.utils.IdGenerator;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -37,11 +43,14 @@ public class ProratedExpenseService {
 
 
     @Transactional
-    public ExpenseResponseDTO addExpense(User user, ExpenseDTO dto) {
+    public ExpenseResponseDTO addProratedExpense(User user, ProratedExpenseDTO dto) {
         ExpenseCategory category = resolveCategory(user, dto.getCategoryName());
         PaymentMethod pm = dto.getPaymentMethodId() != null
                 ? paymentMethodRepo.findById(dto.getPaymentMethodId()).orElse(null)
                 : null;
+
+        List<ExpenseDTO> expenseDTOS = calculateMonthlyExpenseComponents(dto);
+
 
         Expense expense = Expense.builder()
                 .id(idGenerator.generateExpenseId(user.getId()))
@@ -57,6 +66,40 @@ public class ProratedExpenseService {
 
         expense = expenseRepo.save(expense);
         return ExpenseResponseDTO.from(expense, List.of());
+    }
+
+    public List<ExpenseDTO> calculateMonthlyExpenseComponents(ProratedExpenseDTO dto) {
+        List<ExpenseDTO> expenseDTOS = new ArrayList<>();
+        long noOfDays = ChronoUnit.DAYS.between(dto.getValidFrom(), dto.getValidTill()) + 1;
+        long noOfMonths = ChronoUnit.MONTHS.between(dto.getValidFrom(), dto.getValidTill()) + 2;
+        YearMonth yearMonthCurrent = YearMonth.of(dto.getValidFrom().getYear(), dto.getValidFrom().getMonth());
+        BigDecimal dailyComponent = dto.getAmount().divide(BigDecimal.valueOf(noOfDays), 10, BigDecimal.ROUND_HALF_UP);
+
+        for(long i = 1; i <= noOfMonths; i++){
+            BigDecimal monthlyComponent;
+            if(i == 1){
+                long validDays = dto.getValidFrom().lengthOfMonth() - dto.getValidFrom().getDayOfMonth() + 1;
+                monthlyComponent = dailyComponent.multiply(BigDecimal.valueOf(validDays));
+            } else if (i == noOfMonths) {
+                long validDays = dto.getValidTill().getDayOfMonth();
+                monthlyComponent = dailyComponent.multiply(BigDecimal.valueOf(validDays));
+            } else {
+                long validDays = yearMonthCurrent.lengthOfMonth();
+                monthlyComponent = dailyComponent.multiply(BigDecimal.valueOf(validDays));
+            }
+            ExpenseDTO expenseDTO = ExpenseDTO.builder()
+                    .description(dto.getDescription())
+                    .categoryName(dto.getCategoryName())
+                    .paymentMethodId(dto.getPaymentMethodId())
+                    .amount(monthlyComponent)
+                    .necessity(dto.getNecessity())
+                    .expenseType(dto.getExpenseType())
+                    .expDt(LocalDate.of(yearMonthCurrent.getYear(), yearMonthCurrent.getMonth(), 1))
+                    .build();
+            expenseDTOS.add(expenseDTO);
+            yearMonthCurrent = yearMonthCurrent.plusMonths(1);
+        }
+        return expenseDTOS;
     }
 
     @Transactional
