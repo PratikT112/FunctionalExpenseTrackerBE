@@ -1,14 +1,13 @@
 package com.pratikt112.expensetrackermain.service;
 
-import com.pratikt112.expensetrackermain.DTO.ExpenseAmendDto;
-import com.pratikt112.expensetrackermain.DTO.ExpenseDTO;
-import com.pratikt112.expensetrackermain.DTO.ExpenseResponseDTO;
-import com.pratikt112.expensetrackermain.DTO.ProratedExpenseDTO;
+import com.pratikt112.expensetrackermain.DTO.*;
 import com.pratikt112.expensetrackermain.enums.ReconciliationStatus;
 import com.pratikt112.expensetrackermain.model.*;
 import com.pratikt112.expensetrackermain.repository.*;
 import com.pratikt112.expensetrackermain.utils.IdGenerator;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,6 +22,7 @@ import java.util.stream.Collectors;
 @Service
 public class ProratedExpenseService {
 
+    private final Logger LOGGER = LoggerFactory.getLogger(ProratedExpenseService.class);
     private final ProratedExpenseRepo proratedExpenseRepo;
     private final ExpenseRepo expenseRepo;
     private final ExpCategoryRepo expCategoryRepo;
@@ -43,29 +43,63 @@ public class ProratedExpenseService {
 
 
     @Transactional
-    public ExpenseResponseDTO addProratedExpense(User user, ProratedExpenseDTO dto) {
+    public ProratedExpenseResponseDTO addProratedExpense(User user, ProratedExpenseDTO dto) {
         ExpenseCategory category = resolveCategory(user, dto.getCategoryName());
         PaymentMethod pm = dto.getPaymentMethodId() != null
                 ? paymentMethodRepo.findById(dto.getPaymentMethodId()).orElse(null)
                 : null;
 
         List<ExpenseDTO> expenseDTOS = calculateMonthlyExpenseComponents(dto);
+        List<Expense> proratedCompExpenses = expenseDTOS.stream().map(x->mapExpenseDTOToExpense(x, user, category, pm)).toList();
+        LOGGER.info("{} expenses have been added",  proratedCompExpenses.size());
+        expenseRepo.saveAll(proratedCompExpenses);
+
+        ProratedExpense proratedExpense = ProratedExpense.builder()
+                .id(idGenerator.generateProratedExpenseId(user.getId()))
+                .description(dto.getDescription())
+                .amount(dto.getAmount())
+                .category(category)
+                .paymentMethod(pm)
+                .monthlyComponents(proratedCompExpenses.stream().map(Expense::getId).toList())
+                .necessity(dto.getNecessity())
+                .expenseType(dto.getExpenseType())
+                .expenseDate(dto.getExpDt())
+                .validFrom(dto.getValidFrom())
+                .validTill(dto.getValidTill())
+                .user(user)
+                .build();
+
+        ProratedExpense savedProratedExpense = proratedExpenseRepo.save(proratedExpense);
 
 
-        Expense expense = Expense.builder()
+        return ProratedExpenseResponseDTO.builder()
+                .proratedExpenseId(savedProratedExpense.getId())
+                .description(dto.getDescription())
+                .amount(dto.getAmount())
+                .categoryName(category.getCategoryName())
+                .paymentMethodName(pm.getPaymentName())
+                .necessity(dto.getNecessity())
+                .expenseType(dto.getExpenseType())
+                .expenseDate(dto.getExpDt())
+                .build();
+    }
+    
+    public Expense mapExpenseDTOToExpense(ExpenseDTO dto, User user, ExpenseCategory category, PaymentMethod pm) {
+        return Expense.builder()
                 .id(idGenerator.generateExpenseId(user.getId()))
                 .description(dto.getDescription())
                 .amount(dto.getAmount())
                 .category(category)
                 .paymentMethod(pm)
+                .reconciledAmount(BigDecimal.ZERO)
+                .reconciliationStatus(ReconciliationStatus.UNRECONCILED)
+                .deleted(false)
                 .necessity(dto.getNecessity())
                 .expenseType(dto.getExpenseType())
                 .expenseDate(dto.getExpDt())
                 .user(user)
                 .build();
-
-        expense = expenseRepo.save(expense);
-        return ExpenseResponseDTO.from(expense, List.of());
+        
     }
 
     public List<ExpenseDTO> calculateMonthlyExpenseComponents(ProratedExpenseDTO dto) {

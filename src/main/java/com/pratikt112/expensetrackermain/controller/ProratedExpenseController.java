@@ -1,11 +1,9 @@
 package com.pratikt112.expensetrackermain.controller;
 
-import com.pratikt112.expensetrackermain.DTO.ExpenseAmendDto;
-import com.pratikt112.expensetrackermain.DTO.ExpenseDTO;
-import com.pratikt112.expensetrackermain.DTO.ExpenseResponseDTO;
-import com.pratikt112.expensetrackermain.DTO.ResourceDTOs;
+import com.pratikt112.expensetrackermain.DTO.*;
 import com.pratikt112.expensetrackermain.model.User;
 import com.pratikt112.expensetrackermain.service.ExpenseService;
+import com.pratikt112.expensetrackermain.service.ProratedExpenseService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,9 +18,11 @@ import java.util.List;
 public class ProratedExpenseController {
 
     private final ExpenseService expenseService;
+    private final ProratedExpenseService proratedExpenseService;
 
-    public ProratedExpenseController(ExpenseService expenseService) {
+    public ProratedExpenseController(ExpenseService expenseService, ProratedExpenseService proratedExpenseService) {
         this.expenseService = expenseService;
+        this.proratedExpenseService = proratedExpenseService;
     }
 
     @GetMapping
@@ -36,10 +36,10 @@ public class ProratedExpenseController {
     }
 
     @PostMapping
-    public ResponseEntity<?> addExpense(@AuthenticationPrincipal User user,
-                                        @RequestBody ExpenseDTO dto) {
+    public ResponseEntity<?> addProratedExpense(@AuthenticationPrincipal User user,
+                                                @RequestBody ProratedExpenseDTO dto) {
         try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(expenseService.addExpense(user, dto));
+            return ResponseEntity.status(HttpStatus.CREATED).body(proratedExpenseService.addProratedExpense(user, dto));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
